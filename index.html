@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="es-AR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#009688">
+<!-- Pide a los buscadores (Google, Bing...) que NO listen esta página.
+     No afecta el funcionamiento ni la instalación de la app. -->
+<meta name="robots" content="noindex, nofollow">
+<!-- Datos para que el celular la trate como una app instalable -->
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>FG – Gastos</title>
+
+<style>
+  /* ======================================================================
+     ESTILOS (CSS)
+     Los colores están como variables para cambiarlos fácil desde un solo lugar.
+     ====================================================================== */
+  :root {
+    --verde: #009688;
+    --verde-oscuro: #00796b;
+    --fondo: #e6f4f2;
+    --tarjeta: #ffffff;
+    --texto: #1f2933;
+    --suave: #6b7785;
+    --borde: #d3dde0;
+    --error: #d93025;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --fondo: #0f1a19;
+      --tarjeta: #18262a;
+      --texto: #e8eef0;
+      --suave: #9aa8ae;
+      --borde: #2f4146;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--fondo);
+    color: var(--texto);
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+  }
+  header {
+    background: var(--verde);
+    color: #fff;
+    padding: 18px 20px;
+    font-size: 1.3rem;
+    font-weight: 700;
+  }
+  main { max-width: 560px; margin: 0 auto; padding: 14px; }
+
+  /* Cada pregunta va en una "tarjeta" */
+  .tarjeta {
+    background: var(--tarjeta);
+    border-radius: 14px;
+    padding: 14px 16px 16px;
+    margin-bottom: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.12);
+  }
+  .tarjeta > label, .tarjeta > .titulo {
+    display: block;
+    font-weight: 600;
+    margin-bottom: 10px;
+  }
+  .tarjeta .req { color: var(--error); }
+
+  input[type=text], input[type=date], input[inputmode=decimal] {
+    width: 100%;
+    font-size: 1.05rem;
+    padding: 12px;
+    border: 2px solid var(--borde);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--texto);
+  }
+  input:focus { outline: none; border-color: var(--verde); }
+
+  /* Las opciones (Gasto de, Categoría, Forma de pago) son "botones-píldora" */
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    border: 2px solid var(--borde);
+    background: transparent;
+    color: var(--texto);
+    font-size: 1rem;
+    padding: 10px 14px;
+    border-radius: 999px;
+    cursor: pointer;
+  }
+  .chip.sel {
+    background: var(--verde);
+    border-color: var(--verde);
+    color: #fff;
+    font-weight: 600;
+  }
+
+  /* Botón enviar */
+  #btnEnviar {
+    width: 100%;
+    font-size: 1.15rem;
+    font-weight: 700;
+    padding: 16px;
+    border: none;
+    border-radius: 14px;
+    background: var(--verde);
+    color: #fff;
+    cursor: pointer;
+  }
+  #btnEnviar:disabled { background: var(--borde); color: var(--suave); cursor: not-allowed; }
+  #btnEnviar:not(:disabled):active { background: var(--verde-oscuro); }
+
+  /* Aviso de envíos pendientes (cuando no hubo internet) */
+  #pendientes {
+    display: none;
+    background: #fff4d6;
+    color: #6a4b00;
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    font-size: .95rem;
+  }
+  #pendientes button {
+    margin-left: 8px;
+    border: none;
+    background: #6a4b00;
+    color: #fff;
+    border-radius: 8px;
+    padding: 6px 12px;
+    cursor: pointer;
+  }
+
+  /* Mensajito temporal ("Enviado", "Error"...) */
+  #aviso {
+    position: fixed;
+    left: 50%;
+    bottom: calc(24px + env(safe-area-inset-bottom));
+    transform: translateX(-50%) translateY(120px);
+    background: #263238;
+    color: #fff;
+    padding: 14px 20px;
+    border-radius: 12px;
+    font-weight: 600;
+    transition: transform .3s;
+    max-width: 90vw;
+    text-align: center;
+  }
+  #aviso.visible { transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+
+<body>
+<header>💸 Nuevo gasto</header>
+
+<main>
+  <div id="pendientes"></div>
+
+  <!-- Los grupos de opciones se dibujan desde JavaScript (ver CONFIG más abajo) -->
+  <div class="tarjeta">
+    <div class="titulo">Gasto de <span class="req">*</span></div>
+    <div class="chips" id="gastoDe"></div>
+  </div>
+
+  <div class="tarjeta">
+    <label for="concepto">Concepto <span class="req">*</span></label>
+    <input type="text" id="concepto" autocomplete="off">
+  </div>
+
+  <div class="tarjeta">
+    <div class="titulo">Categoría <span class="req">*</span></div>
+    <div class="chips" id="categoria"></div>
+  </div>
+
+  <div class="tarjeta">
+    <label for="fecha">Fecha <span class="req">*</span></label>
+    <input type="date" id="fecha">
+  </div>
+
+  <div class="tarjeta">
+    <label for="importe">Importe <span class="req">*</span></label>
+    <!-- inputmode="decimal" hace que el celular muestre el teclado numérico -->
+    <input type="text" inputmode="decimal" id="importe" autocomplete="off" placeholder="0,00">
+  </div>
+
+  <div class="tarjeta">
+    <div class="titulo">Forma de pago <span class="req">*</span></div>
+    <div class="chips" id="formaPago"></div>
+  </div>
+
+  <button id="btnEnviar" disabled>Enviar</button>
+</main>
+
+<div id="aviso"></div>
+
+<script>
+/* ==========================================================================
+   1) CONFIGURACIÓN DEL FORMULARIO
+      Todo lo que depende de tu Google Form está acá, en un solo lugar.
+   ========================================================================== */
+const CONFIG = {
+  // URL de envío: la del formulario terminando en /formResponse
+  URL_ENVIO: "https://docs.google.com/forms/d/e/1FAIpQLSdb5_35O95qUEVOCBzdX1hSSGWlXIkxuZCIufi-5otvLGo6pA/formResponse",
+
+  // IDs de cada pregunta (salen del "enlace prellenado")
+  ENTRY: {
+    gastoDe:   "entry.952483635",
+    concepto:  "entry.581394775",
+    categoria: "entry.761356738",
+    fecha:     "entry.1392018076",   // la fecha se manda en 3 partes: _year, _month, _day
+    importe:   "entry.1702528282",
+    formaPago: "entry.1660220530"
+  },
+
+  // Opciones: [texto EXACTO del formulario, emoji decorativo].
+  // El emoji es solo visual; lo que se envía es el texto.
+  // Para agregar un medio de pago nuevo, agregá una línea en formaPago
+  // (y la misma opción en el Google Form).
+  OPCIONES: {
+    gastoDe: [
+      ["Ricardo", "👨"],
+      ["Tere", "👩"]
+    ],
+    categoria: [
+      ["1-Megamercado", "🛒"],
+      ["2-Salud", "💊"],
+      ["3-Impuestos-Servicios", "🧾"],
+      ["4-Auto", "🚗"],
+      ["6-Especiales", "⭐"],
+      ["8-Especiales Nietos", "🧸"],
+      ["9-Ingresos", "💰"]
+    ],
+    formaPago: [
+      ["MP", "📱"],
+      ["Efectivo", "💵"],
+      ["Banco", "🏦"],
+      ["Cripto", "🪙"]
+    ]
+  }
+};
+
+/* ==========================================================================
+   2) ESTADO: acá se guardan las opciones elegidas (los campos de texto
+      se leen directamente de la pantalla cuando hace falta).
+   ========================================================================== */
+const elegido = { gastoDe: null, categoria: null, formaPago: null };
+
+const $ = (id) => document.getElementById(id);   // atajo para document.getElementById
+
+/* ==========================================================================
+   3) DIBUJAR LOS GRUPOS DE OPCIONES
+      Para cada grupo crea un botón por opción y maneja el clic.
+   ========================================================================== */
+function dibujarGrupo(clave) {
+  const contenedor = $(clave);
+  CONFIG.OPCIONES[clave].forEach(([valor, emoji]) => {
+    const boton = document.createElement("button");
+    boton.type = "button";
+    boton.className = "chip";
+    boton.textContent = emoji + " " + valor;
+    boton.dataset.valor = valor;                 // guardamos el texto real a enviar
+    boton.addEventListener("click", () => {
+      elegido[clave] = valor;
+      // Marcar solo este botón como seleccionado dentro del grupo
+      contenedor.querySelectorAll(".chip").forEach(b => b.classList.remove("sel"));
+      boton.classList.add("sel");
+      validar();
+    });
+    contenedor.appendChild(boton);
+  });
+}
+
+function limpiarGrupo(clave) {
+  elegido[clave] = null;
+  $(clave).querySelectorAll(".chip").forEach(b => b.classList.remove("sel"));
+}
+
+/* ==========================================================================
+   4) VALIDACIÓN: el botón Enviar se habilita solo si todo está completo
+   ========================================================================== */
+function validar() {
+  const completo =
+    elegido.gastoDe && elegido.categoria && elegido.formaPago &&
+    $("concepto").value.trim() !== "" &&
+    $("importe").value.trim() !== "" &&
+    $("fecha").value !== "";
+  $("btnEnviar").disabled = !completo;
+}
+
+/* ==========================================================================
+   5) UTILIDADES
+   ========================================================================== */
+// Fecha de hoy en formato aaaa-mm-dd (el que usa <input type="date">),
+// calculada con la hora local del celular.
+function hoy() {
+  const d = new Date();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${mm}-${dd}`;
+}
+
+// Mensajito flotante que desaparece solo a los 3 segundos
+let temporizadorAviso;
+function avisar(texto) {
+  const a = $("aviso");
+  a.textContent = texto;
+  a.classList.add("visible");
+  clearTimeout(temporizadorAviso);
+  temporizadorAviso = setTimeout(() => a.classList.remove("visible"), 3000);
+}
+
+/* ==========================================================================
+   6) COLA DE PENDIENTES
+      Si al enviar no hay internet, el gasto se guarda en el celular
+      (localStorage) y se reintenta solo cuando vuelve la conexión.
+   ========================================================================== */
+const CLAVE_COLA = "fg_pendientes";
+
+function leerCola() {
+  try { return JSON.parse(localStorage.getItem(CLAVE_COLA)) || []; }
+  catch (e) { return []; }
+}
+function guardarCola(cola) {
+  localStorage.setItem(CLAVE_COLA, JSON.stringify(cola));
+  mostrarPendientes();
+}
+function mostrarPendientes() {
+  const n = leerCola().length;
+  const caja = $("pendientes");
+  if (n === 0) { caja.style.display = "none"; return; }
+  caja.style.display = "block";
+  caja.innerHTML = `⏳ ${n} gasto${n > 1 ? "s" : ""} sin enviar `
+                 + `<button id="btnReintentar">Reintentar</button>`;
+  $("btnReintentar").addEventListener("click", reintentarPendientes);
+}
+
+/* ==========================================================================
+   7) ENVÍO AL GOOGLE FORM
+      Hace un POST igual al que haría el navegador al tocar "Enviar".
+      "no-cors": Google no permite leer su respuesta desde otra web, pero el
+      envío SÍ se realiza. Por eso solo podemos detectar fallas de conexión
+      (no errores del formulario).
+   ========================================================================== */
+async function postearAlFormulario(datos) {
+  await fetch(CONFIG.URL_ENVIO, {
+    method: "POST",
+    mode: "no-cors",
+    body: datos            // URLSearchParams → se manda como "campo=valor&campo=valor"
+  });
+}
+
+// Arma los datos tal como los espera Google Forms
+function armarDatos() {
+  const E = CONFIG.ENTRY;
+  const [anio, mes, dia] = $("fecha").value.split("-");   // "2026-10-15" → ["2026","10","15"]
+  const datos = new URLSearchParams();
+  datos.append(E.gastoDe, elegido.gastoDe);
+  datos.append(E.concepto, $("concepto").value.trim());
+  datos.append(E.categoria, elegido.categoria);
+  datos.append(E.fecha + "_year", anio);
+  datos.append(E.fecha + "_month", String(parseInt(mes, 10)));  // sin cero adelante
+  datos.append(E.fecha + "_day", String(parseInt(dia, 10)));
+  datos.append(E.importe, $("importe").value.trim());
+  datos.append(E.formaPago, elegido.formaPago);
+  return datos;
+}
+
+async function enviar() {
+  const boton = $("btnEnviar");
+  boton.disabled = true;
+  boton.textContent = "Enviando...";
+
+  const datos = armarDatos();
+  try {
+    await postearAlFormulario(datos);
+    avisar("✅ Gasto enviado");
+    if (navigator.vibrate) navigator.vibrate(60);
+  } catch (e) {
+    // Sin conexión: lo guardamos para reintentar más tarde
+    const cola = leerCola();
+    cola.push(datos.toString());
+    guardarCola(cola);
+    avisar("📴 Sin conexión: guardado para enviar luego");
+  }
+
+  // Limpiamos lo que cambia en cada gasto. Quedan "Gasto de", fecha y
+  // "Forma de pago" porque suelen repetirse (si querés limpiar todo, hacelo acá).
+  $("concepto").value = "";
+  $("importe").value = "";
+  limpiarGrupo("categoria");
+
+  boton.textContent = "Enviar";
+  validar();
+}
+
+async function reintentarPendientes() {
+  let cola = leerCola();
+  if (cola.length === 0) return;
+  const quedan = [];
+  for (const texto of cola) {
+    try {
+      await postearAlFormulario(new URLSearchParams(texto));
+    } catch (e) {
+      quedan.push(texto);            // sigue sin conexión: lo dejamos en la cola
+    }
+  }
+  guardarCola(quedan);
+  if (quedan.length === 0) avisar("✅ Pendientes enviados");
+}
+
+/* ==========================================================================
+   8) ARRANQUE: se ejecuta al abrir la página
+   ========================================================================== */
+dibujarGrupo("gastoDe");
+dibujarGrupo("categoria");
+dibujarGrupo("formaPago");
+
+$("fecha").value = hoy();                              // fecha de hoy precargada
+$("concepto").addEventListener("input", validar);      // revalidar al escribir
+$("importe").addEventListener("input", validar);
+$("fecha").addEventListener("input", validar);
+$("btnEnviar").addEventListener("click", enviar);
+
+window.addEventListener("online", reintentarPendientes);  // volvió internet → reintentar
+mostrarPendientes();
+reintentarPendientes();
+
+// Registra el "service worker": es lo que permite que la app abra sin internet
+if ("serviceWorker" in navigator) {
+  navigator.serviceWorker.register("sw.js");
+}
+</script>
+</body>
+</html>
