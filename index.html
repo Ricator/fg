@@ -110,6 +110,12 @@
     font-weight: 600;
   }
 
+  /* Forma de pago: letra y relleno más chicos para que los 4 botones
+     (MP, Efectivo, Banco, Cripto) entren en un solo renglón.
+     Si agregás más medios de pago y no entran, los extra pasan al renglón de abajo. */
+  #formaPago { gap: 4px; }
+  #formaPago .chip { font-size: .85rem; padding: 7px 6px; white-space: nowrap; }
+
   /* Botón enviar */
   #btnEnviar {
     width: 100%;
