@@ -116,6 +116,29 @@
   #formaPago { gap: 4px; }
   #formaPago .chip { font-size: .85rem; padding: 7px 6px; white-space: nowrap; }
 
+  /* Fila de atajos del Concepto: una sola línea que se desliza hacia los costados.
+     No ocupa más altura que una fila de botones chicos. */
+  .atajos {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+    overflow-x: auto;               /* si no entran todos, se desliza con el dedo */
+    scrollbar-width: none;          /* oculta la barra de desplazamiento */
+  }
+  .atajos::-webkit-scrollbar { display: none; }
+  .atajo {
+    flex: 0 0 auto;                 /* cada atajo mantiene su ancho (no se achica) */
+    font-size: .85rem;
+    padding: 5px 11px;
+    border: none;
+    border-radius: 999px;
+    background: rgba(0, 150, 136, .12);   /* verde suave, distinto de las opciones grandes */
+    color: var(--verde-oscuro);
+    cursor: pointer;
+  }
+  .atajo:active { background: rgba(0, 150, 136, .3); }
+  @media (prefers-color-scheme: dark) { .atajo { color: #4db6ac; } }
+
   /* Botón enviar */
   #btnEnviar {
     width: 100%;
@@ -185,6 +208,8 @@
   <div class="tarjeta">
     <label for="concepto">Concepto <span class="req">*</span></label>
     <input type="text" id="concepto" autocomplete="off">
+    <!-- Atajos de conceptos frecuentes (se dibujan desde JavaScript) -->
+    <div class="atajos" id="atajos"></div>
   </div>
 
   <div class="tarjeta">
@@ -233,6 +258,22 @@ const CONFIG = {
     importe:   "entry.1702528282",
     formaPago: "entry.1660220530"
   },
+
+  // Atajos del campo Concepto, ordenados de más a menos frecuentes.
+  // Al tocar uno, se copia al campo y se puede seguir escribiendo.
+  // Si el texto termina en espacio (como "Dinero a "), el teclado se abre
+  // para que completes el resto (el nombre de la persona).
+  // Para agregar o quitar atajos, editá solo esta lista.
+  ATAJOS_CONCEPTO: [
+    "La anónima",
+    "Almacen",
+    "Dinero a ",
+    "Milanesas",
+    "Carnave",
+    "Agua",
+    "Verduleria",
+    "Pinguino"
+  ],
 
   // Opciones: [texto EXACTO del formulario, emoji decorativo].
   // El emoji es solo visual; lo que se envía es el texto.
@@ -295,6 +336,28 @@ function dibujarGrupo(clave) {
 function limpiarGrupo(clave) {
   elegido[clave] = null;
   $(clave).querySelectorAll(".chip").forEach(b => b.classList.remove("sel"));
+}
+
+// Dibuja los atajos del Concepto. Al tocar uno: copia el texto al campo.
+function dibujarAtajos() {
+  const campo = $("concepto");
+  CONFIG.ATAJOS_CONCEPTO.forEach((texto) => {
+    const boton = document.createElement("button");
+    boton.type = "button";
+    boton.className = "atajo";
+    boton.textContent = texto.trim();        // en pantalla se muestra sin el espacio final
+    boton.addEventListener("click", () => {
+      campo.value = texto;                   // reemplaza lo que hubiera escrito
+      // Solo si el atajo está "incompleto" (termina en espacio) abrimos el teclado,
+      // para no tapar la pantalla cuando el atajo ya alcanza.
+      if (texto.endsWith(" ")) {
+        campo.focus();
+        campo.setSelectionRange(texto.length, texto.length);   // cursor al final
+      }
+      validar();                             // habilita Enviar si ya está todo completo
+    });
+    $("atajos").appendChild(boton);
+  });
 }
 
 /* ==========================================================================
@@ -436,6 +499,7 @@ async function reintentarPendientes() {
 dibujarGrupo("gastoDe");
 dibujarGrupo("categoria");
 dibujarGrupo("formaPago");
+dibujarAtajos();
 
 $("fecha").value = hoy();                              // fecha de hoy precargada
 $("concepto").addEventListener("input", validar);      // revalidar al escribir
